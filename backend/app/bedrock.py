@@ -4,12 +4,18 @@ import logging
 import os
 from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple, TypeGuard
 
-from app.config import (
-    BEDROCK_PRICING,
+from app.settings.models import (
     DEFAULT_DEEP_SEEK_GENERATION_CONFIG,
     DEFAULT_GENERATION_CONFIG,
     DEFAULT_LLAMA_GENERATION_CONFIG,
     DEFAULT_MISTRAL_GENERATION_CONFIG,
+    calculate_price,
+    get_model_id,
+    is_deepseek_model,
+    is_llama_model,
+    is_mistral,
+    is_nova_model,
+    is_tool_use_supported,
 )
 from app.repositories.models.custom_bot import GenerationParamsModel
 from app.repositories.models.custom_bot_guardrails import BedrockGuardrailsModel
@@ -51,34 +57,7 @@ def _is_conversation_role(role: str) -> TypeGuard[ConversationRoleType]:
     return role in ["user", "assistant"]
 
 
-def is_nova_model(model: type_model_name) -> bool:
-    """Check if the model is an Amazon Nova model"""
-    return "amazon-nova" in model
-
-
-def is_deepseek_model(model: type_model_name) -> bool:
-    """Check if the model is a DeepSeek model"""
-    return "deepseek" in model
-
-
-def is_llama_model(model: type_model_name) -> bool:
-    """Check if the model is a Meta Llama model"""
-    return "llama" in model
-
-
-def is_mistral(model: type_model_name) -> bool:
-    """Check if the model is a Mistral model"""
-    return "mistral" in model
-
-
-def is_tooluse_supported(model: type_model_name) -> bool:
-    """Check if the model is supported for tool use"""
-    return model not in [
-        "deepseek-r1",
-        "llama3-2-1b-instruct",
-        "llama3-2-3b-instruct",
-        "",
-    ]
+# These functions are now imported from app.settings.models
 
 
 def _prepare_deepseek_model_params(
@@ -480,7 +459,7 @@ def compose_args_for_converse_api(
             args["guardrailConfig"]["streamProcessingMode"] = "async"
 
     # NOTE: Some models doesn't support tool use. https://docs.aws.amazon.com/bedrock/latest/userguide/conversation-inference-supported-models-features.html
-    if tools:
+    if tools and is_tool_use_supported(model):
         args["toolConfig"] = {
             "tools": [
                 {
@@ -515,246 +494,7 @@ def call_converse_api(
         raise
 
 
-def calculate_price(
-    model: type_model_name,
-    input_tokens: int,
-    output_tokens: int,
-    region: str = BEDROCK_REGION,
-) -> float:
-    input_price = (
-        BEDROCK_PRICING.get(region, {})
-        .get(model, {})
-        .get("input", BEDROCK_PRICING["default"][model]["input"])
-    )
-    output_price = (
-        BEDROCK_PRICING.get(region, {})
-        .get(model, {})
-        .get("output", BEDROCK_PRICING["default"][model]["output"])
-    )
-
-    return input_price * input_tokens / 1000.0 + output_price * output_tokens / 1000.0
+# The calculate_price function is now imported from app.settings.models
 
 
-def get_model_id(
-    model: type_model_name,
-    enable_cross_region: bool = ENABLE_BEDROCK_CROSS_REGION_INFERENCE,
-    bedrock_region: str = BEDROCK_REGION,
-) -> str:
-    # Ref: https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids-arns.html
-    base_model_ids = {
-        "claude-v3-haiku": "anthropic.claude-3-haiku-20240307-v1:0",
-        "claude-v3-opus": "anthropic.claude-3-opus-20240229-v1:0",
-        "claude-v3.5-sonnet": "anthropic.claude-3-5-sonnet-20240620-v1:0",
-        "claude-v3.5-sonnet-v2": "anthropic.claude-3-5-sonnet-20241022-v2:0",
-        "claude-v3.7-sonnet": "anthropic.claude-3-7-sonnet-20250219-v1:0",
-        "claude-v3.5-haiku": "anthropic.claude-3-5-haiku-20241022-v1:0",
-        "mistral-7b-instruct": "mistral.mistral-7b-instruct-v0:2",
-        "mixtral-8x7b-instruct": "mistral.mixtral-8x7b-instruct-v0:1",
-        "mistral-large": "mistral.mistral-large-2402-v1:0",
-        "mistral-large-2": "mistral.mistral-large-2407-v1:0",
-        # New Amazon Nova models
-        "amazon-nova-pro": "amazon.nova-pro-v1:0",
-        "amazon-nova-lite": "amazon.nova-lite-v1:0",
-        "amazon-nova-micro": "amazon.nova-micro-v1:0",
-        # DeepSeek models
-        "deepseek-r1": "deepseek.r1-v1:0",
-        # Meta Llama 3 models
-        "llama3-3-70b-instruct": "meta.llama3-3-70b-instruct-v1:0",
-        "llama3-2-1b-instruct": "meta.llama3-2-1b-instruct-v1:0",
-        "llama3-2-3b-instruct": "meta.llama3-2-3b-instruct-v1:0",
-        "llama3-2-11b-instruct": "meta.llama3-2-11b-instruct-v1:0",
-        "llama3-2-90b-instruct": "meta.llama3-2-90b-instruct-v1:0",
-    }
-
-    # Made this list by scripts/cross_region_inference/get_supported_cross_region_inferences.py
-    # Ref: https://docs.aws.amazon.com/bedrock/latest/userguide/inference-profiles-support.html
-    supported_regions = {
-        "us-east-1": {
-            "area": "us",
-            "models": [
-                "amazon-nova-lite",
-                "amazon-nova-micro",
-                "amazon-nova-pro",
-                "claude-v3-haiku",
-                "claude-v3-opus",
-                "claude-v3.5-haiku",
-                "claude-v3.5-sonnet",
-                "claude-v3.5-sonnet-v2",
-                "claude-v3.7-sonnet",
-                "deepseek-r1",
-                "llama3-3-70b-instruct",
-                "llama3-2-1b-instruct",
-                "llama3-2-3b-instruct",
-                "llama3-2-11b-instruct",
-                "llama3-2-90b-instruct",
-            ],
-        },
-        "us-east-2": {
-            "area": "us",
-            "models": [
-                "amazon-nova-lite",
-                "amazon-nova-micro",
-                "amazon-nova-pro",
-                "claude-v3-haiku",
-                "claude-v3.5-haiku",
-                "claude-v3.5-sonnet",
-                "claude-v3.5-sonnet-v2",
-                "claude-v3.7-sonnet",
-                "deepseek-r1",
-                "llama3-3-70b-instruct",
-                "llama3-2-1b-instruct",
-                "llama3-2-3b-instruct",
-                "llama3-2-11b-instruct",
-                "llama3-2-90b-instruct",
-            ],
-        },
-        "us-west-2": {
-            "area": "us",
-            "models": [
-                "amazon-nova-lite",
-                "amazon-nova-micro",
-                "amazon-nova-pro",
-                "claude-v3-haiku",
-                "claude-v3-opus",
-                "claude-v3.5-haiku",
-                "claude-v3.5-sonnet",
-                "claude-v3.5-sonnet-v2",
-                "claude-v3.7-sonnet",
-                "deepseek-r1",
-                "llama3-3-70b-instruct",
-                "llama3-2-1b-instruct",
-                "llama3-2-3b-instruct",
-                "llama3-2-11b-instruct",
-                "llama3-2-90b-instruct",
-            ],
-        },
-        "eu-central-1": {
-            "area": "eu",
-            "models": [
-                "amazon-nova-lite",
-                "amazon-nova-micro",
-                "amazon-nova-pro",
-                "claude-v3-haiku",
-                "claude-v3.5-sonnet",
-                "claude-v3.7-sonnet",
-                "llama3-2-1b-instruct",
-                "llama3-2-3b-instruct",
-            ],
-        },
-        "eu-west-1": {
-            "area": "eu",
-            "models": [
-                "amazon-nova-lite",
-                "amazon-nova-micro",
-                "amazon-nova-pro",
-                "claude-v3-haiku",
-                "claude-v3.5-sonnet",
-                "claude-v3.7-sonnet",
-                "llama3-2-1b-instruct",
-                "llama3-2-3b-instruct",
-            ],
-        },
-        "eu-west-2": {"area": "eu", "models": []},
-        "eu-west-3": {
-            "area": "eu",
-            "models": [
-                "amazon-nova-lite",
-                "amazon-nova-micro",
-                "amazon-nova-pro",
-                "claude-v3-haiku",
-                "claude-v3.5-sonnet",
-                "claude-v3.7-sonnet",
-                "llama3-2-1b-instruct",
-                "llama3-2-3b-instruct",
-            ],
-        },
-        "eu-north-1": {
-            "area": "eu",
-            "models": [
-                "amazon-nova-lite",
-                "amazon-nova-micro",
-                "amazon-nova-pro",
-            ],
-        },
-        "ap-south-1": {
-            "area": "apac",
-            "models": [
-                "amazon-nova-lite",
-                "amazon-nova-micro",
-                "amazon-nova-pro",
-                "claude-v3-haiku",
-                "claude-v3.5-sonnet",
-                "claude-v3.5-sonnet-v2",
-            ],
-        },
-        "ap-northeast-1": {
-            "area": "apac",
-            "models": [
-                "amazon-nova-lite",
-                "amazon-nova-micro",
-                "amazon-nova-pro",
-                "claude-v3-haiku",
-                "claude-v3.5-sonnet",
-                "claude-v3.5-sonnet-v2",
-            ],
-        },
-        "ap-northeast-2": {
-            "area": "apac",
-            "models": [
-                "amazon-nova-lite",
-                "amazon-nova-micro",
-                "amazon-nova-pro",
-                "claude-v3-haiku",
-                "claude-v3.5-sonnet",
-                "claude-v3.5-sonnet-v2",
-            ],
-        },
-        "ap-northeast-3": {"area": "apac", "models": ["claude-v3.5-sonnet-v2"]},
-        "ap-southeast-1": {
-            "area": "apac",
-            "models": [
-                "amazon-nova-lite",
-                "amazon-nova-micro",
-                "amazon-nova-pro",
-                "claude-v3-haiku",
-                "claude-v3.5-sonnet",
-                "claude-v3.5-sonnet-v2",
-            ],
-        },
-        "ap-southeast-2": {
-            "area": "apac",
-            "models": [
-                "amazon-nova-lite",
-                "amazon-nova-micro",
-                "amazon-nova-pro",
-                "claude-v3-haiku",
-                "claude-v3.5-sonnet",
-                "claude-v3.5-sonnet-v2",
-            ],
-        },
-    }
-
-    base_model_id = base_model_ids.get(model)
-    if not base_model_id:
-        raise ValueError(f"Unsupported model: {model}")
-
-    model_id = base_model_id
-
-    if enable_cross_region:
-        if (
-            bedrock_region in supported_regions
-            and model in supported_regions[bedrock_region]["models"]
-        ):
-            region_prefix = supported_regions[bedrock_region]["area"]
-            model_id = f"{region_prefix}.{base_model_id}"
-            logger.info(
-                f"Using cross-region model ID: {model_id} for model '{model}' in region '{BEDROCK_REGION}'"
-            )
-        else:
-            logger.warning(
-                f"Region '{bedrock_region}' does not support cross-region inference for model '{model}'."
-            )
-    else:
-        logger.info(f"Using local model ID: {model_id} for model '{model}'")
-
-    return model_id
+# The get_model_id function is now imported from app.settings.models
