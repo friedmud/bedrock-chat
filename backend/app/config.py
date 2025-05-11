@@ -1,6 +1,6 @@
 from typing_extensions import NotRequired, TypedDict
 
-from app.settings.models import (
+from app.models import (
     DEFAULT_DEEP_SEEK_GENERATION_CONFIG,
     DEFAULT_GENERATION_CONFIG,
     DEFAULT_LLAMA_GENERATION_CONFIG,

@@ -4,7 +4,7 @@ import logging
 import os
 from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple, TypeGuard
 
-from app.settings.models import (
+from app.models import (
     DEFAULT_DEEP_SEEK_GENERATION_CONFIG,
     DEFAULT_GENERATION_CONFIG,
     DEFAULT_LLAMA_GENERATION_CONFIG,
@@ -57,7 +57,7 @@ def _is_conversation_role(role: str) -> TypeGuard[ConversationRoleType]:
     return role in ["user", "assistant"]
 
 
-# These functions are now imported from app.settings.models
+# These functions are now imported from app.models
 
 
 def _prepare_deepseek_model_params(
@@ -494,7 +494,7 @@ def call_converse_api(
         raise
 
 
-# The calculate_price function is now imported from app.settings.models
+# The calculate_price function is now imported from app.models
 
 
-# The get_model_id function is now imported from app.settings.models
+# The get_model_id function is now imported from app.models
